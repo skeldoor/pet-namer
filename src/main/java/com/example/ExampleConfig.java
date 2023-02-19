@@ -16,4 +16,35 @@ public interface ExampleConfig extends Config
 	{
 		return "Hello";
 	}
+
+	@ConfigItem(
+			keyName = "cat",
+			name = "Cat",
+			description = "The name of your kitten/cat/hellcat"
+	)
+	default String catName()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+			keyName = "abyssalOrphan",
+			name = "Abyssal orphan",
+			description = "The name of your Abyssal orphan"
+	)
+	default String abyssalOrphanName()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+			keyName = "babyMole",
+			name = "Baby mole",
+			description = "The name of your Baby mole"
+	)
+	default String babyMoleName()
+	{
+		return "";
+	}
+
 }

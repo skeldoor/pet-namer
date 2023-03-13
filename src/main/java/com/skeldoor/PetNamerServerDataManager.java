@@ -10,15 +10,13 @@ import javax.inject.Singleton;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Singleton
-public class PetNamerDataManager {
+public class PetNamerServerDataManager {
     private final String baseUrl = "http://64.226.75.168:8080";
     private final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-
-    @Inject
-    private PetRenamerPlugin plugin;
 
     @Inject
     private OkHttpClient okHttpClient;
@@ -26,9 +24,9 @@ public class PetNamerDataManager {
     @Inject
     private Gson gson;
 
-    protected void updatePetName(PetRenamerPetData data)
+    protected void updatePetName(PetNamerPetData data, PetNamerPetDataManager petNamerPetDataManager)
     {
-        String username = urlifyString(plugin.createUserPetKey(data.username, data.petId));
+        String username = urlifyString(petNamerPetDataManager.createUserPetKey(data.username, data.petId));
         String url = baseUrl.concat("/pet-rename/"+username);
 
         try
@@ -68,12 +66,11 @@ public class PetNamerDataManager {
         }
     }
 
-    public void populatePlayerPets(List<NPC> pets) {
+    public void populatePlayerPets(List<NPC> pets, PetNamerPetDataManager petNamerPetDataManager) {
         if (pets.size() == 0) return;
         StringBuilder usernameToPetName = new StringBuilder();
         for (NPC pet : pets){
-            if (pet == null || pet.getName() == null || pet.getInteracting() == null || pet.getInteracting().getName() == null) continue;
-            String usernamePetname = plugin.createUserPetKey(pet.getInteracting().getName().toLowerCase(), pet.getId());
+            String usernamePetname = petNamerPetDataManager.createUserPetKey(Objects.requireNonNull(pet.getInteracting().getName()).toLowerCase(), pet.getId());
             usernameToPetName.append(usernamePetname).append(";");
         }
 
@@ -96,9 +93,9 @@ public class PetNamerDataManager {
                         try
                         {
                             JsonArray j = gson.fromJson(response.body().string(), JsonArray.class);
-                            List<PetRenamerPetData> playerpetDatas = parsePetRenamerData(j);
-                            for (PetRenamerPetData playerpetData : playerpetDatas){
-                                plugin.updatePlayerPetData(playerpetData);
+                            List<PetNamerPetData> playerpetDatas = parsePetRenamerData(j);
+                            for (PetNamerPetData playerpetData : playerpetDatas){
+                                petNamerPetDataManager.updatePlayerPetData(playerpetData);
                             }
                         }
                         catch (IOException | JsonSyntaxException e)
@@ -116,16 +113,15 @@ public class PetNamerDataManager {
         }
     }
 
-    private static List<PetRenamerPetData> parsePetRenamerData(JsonArray j) {
-        List<PetRenamerPetData> l = new ArrayList<>();
+    private static List<PetNamerPetData> parsePetRenamerData(JsonArray j) {
+        List<PetNamerPetData> l = new ArrayList<>();
         for (JsonElement jsonElement : j)
         {
             JsonObject jObj = jsonElement.getAsJsonObject();
-            PetRenamerPetData d = new PetRenamerPetData(
+            PetNamerPetData d = new PetNamerPetData(
                     jObj.get("username").getAsString(),
                     jObj.get("petId").getAsInt(),
-                    jObj.get("petName").getAsString(),
-                    jObj.get("originalPetName").getAsString());
+                    jObj.get("petName").getAsString());
             l.add(d);
         }
         return l;

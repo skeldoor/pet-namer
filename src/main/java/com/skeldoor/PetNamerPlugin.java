@@ -6,11 +6,14 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.*;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.poh.PohIcons;
 import net.runelite.client.task.Schedule;
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -32,6 +35,9 @@ public class PetNamerPlugin extends Plugin
 	private PetNamerConfig config;
 
 	@Inject
+	private EventBus eventBus;
+
+	@Inject
 	private ChatMessageManager chatMessageManager;
 
 	@Inject
@@ -43,22 +49,27 @@ public class PetNamerPlugin extends Plugin
 	@Inject
 	private PetNamerPetDataManager petNamerPetDataManager;
 
+	@Inject
+	private PetNamerPOH playerOwnedHouse;
+
 	private final int populateInterval = 5; // Seconds
+
+	private PetNamerPetData currentFollower;
 
 	@Override
 	protected void startUp() {
-		petNamerPetDataManager = new PetNamerPetDataManager();
+		eventBus.register(playerOwnedHouse);
 	}
 
 	@Override
-	protected void shutDown() {
-		petNamerPetDataManager.storeNamesToConfig(configManager);
+	protected void shutDown(){
+		eventBus.unregister(playerOwnedHouse);
 	}
 
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged){
 		if (!config.onlineMode() && gameStateChanged.getGameState() == GameState.LOGGED_IN){
-			petNamerPetDataManager.loadNamesFromConfig(configManager, client.getLocalPlayer().getName());
+			petNamerPetDataManager.loadNamesFromConfig(configManager);
 		}
 	}
 
@@ -77,6 +88,14 @@ public class PetNamerPlugin extends Plugin
 							npc -> npc.getInteracting() != null && npc.getInteracting().getName() != null
 					).collect(Collectors.toList());
 			petNamerServerDataManager.populatePlayerPets(nearbyPetsWithValidPlayers, petNamerPetDataManager);
+
+			if (playerOwnedHouse.inAHouse){
+				List<NPC> wanderingPets =
+						client.getNpcs().stream().filter(
+								npc -> npc != null && npc.getName() != null && npc.getInteracting() == null
+						).collect(Collectors.toList());
+				petNamerServerDataManager.populateWanderingPets(playerOwnedHouse.houseOwner, wanderingPets, petNamerPetDataManager);
+			}
 		}
 
 		if (!config.onlineMode() && client.getGameState() == GameState.LOGGED_IN){
@@ -86,27 +105,18 @@ public class PetNamerPlugin extends Plugin
 
 	@Subscribe
 	public void onBeforeRender(BeforeRender ignored){
-		// Replace follower name
-		NPC npc = client.getFollower();
-		if (npc == null || npc.getInteracting() == null || npc.getInteracting().getName() == null) return;
+		// Replace pet name if following player
+		nameFollower();
 
-		String username = npc.getInteracting().getName();
-		int npcId = npc.getComposition().getId();
-		PetNamerPetData existingPetData = petNamerPetDataManager.getPlayerPetName(username, npcId);
+		// Replace pet name if in a house
+		nameHousePets();
 
-		if (existingPetData != null) {
-			NPCComposition existingComposition = npc.getComposition();
-			PetNamerUtils.tryReplaceName(existingComposition, npc.getComposition().getName(), existingPetData.petName);
-		} else {
-			return;
-		}
 
 		// Replace pet's chat box name
 		// Override a cat's in-game name too so that you can have a name longer than 6 characters
-		int petChatboxName = 15138820;
-		Widget PetChatboxWidget = client.getWidget(petChatboxName);
-		if (PetChatboxWidget != null){
-			PetChatboxWidget.setText(existingPetData.petName);
+		Widget petChatboxWidget = client.getWidget(WidgetInfo.DIALOG_NPC_NAME);
+		if (petChatboxWidget != null && currentFollower != null){
+			petChatboxWidget.setText(currentFollower.petName);
 		}
 	}
 
@@ -123,11 +133,14 @@ public class PetNamerPlugin extends Plugin
 			String newPetName = String.join(" ", arguments);
 			newPetName = PetNamerUtils.limitString(newPetName, chatMessageManager);
 			int petId = client.getFollower().getId();
+			String originalPetName = petNamerPetDataManager.getOriginalName(petId, client.getNpcDefinition(petId).getName());
 			if (client.getLocalPlayer().getName() == null) return;
 			String username = client.getLocalPlayer().getName().toLowerCase();
-			PetNamerPetData newPetNamerPetData = new PetNamerPetData(username, petId, newPetName);
-			log.info("New pet name: " + newPetNamerPetData.petName);
-			petNamerServerDataManager.updatePetName(newPetNamerPetData, petNamerPetDataManager);
+			PetNamerPetData newPetNamerPetData = new PetNamerPetData(username, petId, newPetName, originalPetName);
+
+			if (config.onlineMode()){
+				petNamerServerDataManager.updatePetName(newPetNamerPetData, petNamerPetDataManager);
+			}
 			petNamerPetDataManager.updatePlayerPetData(newPetNamerPetData);
 			setOverheadText(newPetName);
 		}
@@ -144,16 +157,53 @@ public class PetNamerPlugin extends Plugin
 				if (npc.getComposition().isFollower()){
 					if (npc.getInteracting() == null || npc.getInteracting().getName() == null) continue;
 					String username = npc.getInteracting().getName();
-					int npcId = npc.getComposition().getId();
-					PetNamerPetData existingPetData = petNamerPetDataManager.getPlayerPetName(username, npcId);
+					String originalPetName = petNamerPetDataManager.getOriginalName(npc.getId(), client.getNpcDefinition(npc.getId()).getName());
+					PetNamerPetData existingPetData = petNamerPetDataManager.getPlayerPetName(username, originalPetName);
 					MenuEntry newEntry;
 					MenuEntry[] currentEntries = menuOpened.getMenuEntries();
 					if (existingPetData == null || !config.onlineMode()) {
-						newEntry = createPetEntry(username, npc.getComposition().getName());
+						newEntry = createPetEntry(username, originalPetName);
 					} else {
 						newEntry = createPetEntry(username, existingPetData.petName);
 					}
 					menuOpened.setMenuEntries(ArrayUtils.insert(0, currentEntries, newEntry));
+				}
+			}
+		}
+	}
+
+	private void nameFollower(){
+		// Replace follower name
+		NPC npc = client.getFollower();
+		if (npc == null || npc.getInteracting() == null || npc.getInteracting().getName() == null) return;
+
+		String username = npc.getInteracting().getName();
+		String originalPetName = petNamerPetDataManager.getOriginalName(npc.getId(), client.getNpcDefinition(npc.getId()).getName());
+		PetNamerPetData existingPetData = petNamerPetDataManager.getPlayerPetName(username, originalPetName);
+
+		if (existingPetData != null) {
+			NPCComposition existingComposition = npc.getComposition();
+			PetNamerUtils.tryReplaceName(existingComposition, npc.getComposition().getName(), existingPetData.petName);
+			currentFollower = existingPetData;
+		}
+	}
+
+	private void nameHousePets(){
+		if (playerOwnedHouse.inAHouse){
+			List<NPC> nearbyNPCs = client.getNpcs();
+			List<NPC> wanderingPets =
+					nearbyNPCs.stream()
+							.filter(npc -> npc.getInteracting() == null)
+							.collect(Collectors.toList());
+			for (NPC npc : wanderingPets) {
+				// Wandering pets (no interacting) belong to the owner of the house
+				String username = playerOwnedHouse.houseOwner;
+				String originalPetName = petNamerPetDataManager.getOriginalName(npc.getId(), client.getNpcDefinition(npc.getId()).getName());
+				PetNamerPetData existingPetData = petNamerPetDataManager.getPlayerPetName(username, originalPetName);
+
+				if (existingPetData != null) {
+					NPCComposition existingComposition = npc.getComposition();
+					PetNamerUtils.tryReplaceName(existingComposition, npc.getComposition().getName(), existingPetData.petName);
 				}
 			}
 		}
@@ -192,7 +242,7 @@ public class PetNamerPlugin extends Plugin
 			case 16 : overheadText = "You're such a little bundle of joy! I'm going to call you " + petName  + "."; break;
 			case 17 : overheadText = "I've been waiting for the perfect name, I've finally found it. You're now " + petName + "."; break;
 			case 18 : overheadText = "I think you're going to be a great companion, I'm going to name you " + petName + "."; break;
-			case 19 : overheadText = "Would you rather be called  " + petName + "."; break;
+			case 19 : overheadText = "Would you rather be called " + petName + "?"; break;
 			case 20 : overheadText = "Let's find you a cozy bed to sleep in, " + petName + "."; break;
 			case 21 : overheadText = "Are you hungry, " + petName + "? Let's get you some food and water."; break;
 			case 22 : overheadText = "Let's go for a walk, " + petName + "! You'll love getting some fresh air."; break;

@@ -1,5 +1,6 @@
 package com.skeldoor;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.NPCComposition;
 import net.runelite.client.chat.ChatColorType;
@@ -9,18 +10,13 @@ import net.runelite.client.chat.QueuedMessage;
 import java.lang.reflect.Field;
 import java.util.Objects;
 
+@Slf4j
 public class PetNamerUtils {
 
     public static void tryReplaceName(NPCComposition parent, String find, String replace)
     {
         try {
-            String memoryFieldName = getFieldName(parent, find);
-
-            if (memoryFieldName == null) {
-                return;
-            }
-
-            Field field = parent.getClass().getDeclaredField(memoryFieldName);
+            Field field = parent.getClass().getDeclaredField("av");
             field.setAccessible(true);
             field.set(parent, replace);
 

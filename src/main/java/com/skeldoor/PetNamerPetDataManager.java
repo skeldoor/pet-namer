@@ -17,6 +17,19 @@ public class PetNamerPetDataManager {
     private static final String GROUP_NAME = "Pet Namer";
     private static final String LOCAL_CONFIG = "Pet Namer Local Config";
 
+    public String getPetName(String username, String petName){
+        PetNamerPetData petData = playerPetNames.get(createUserPetKey(username, petName));
+        if (petData == null){
+            return petName;
+        } else{
+            return petData.petName;
+        }
+    }
+
+    public PetNamerPetData getPetData(String username, String displayUsername, String petName){
+        return playerPetNames.getOrDefault(createUserPetKey(username, petName), new PetNamerPetData(username, displayUsername, -1, petName, petName));
+    }
+
     public PetNamerPetDataManager(){
         this.playerPetNames = new HashMap<>();
         this.originalPetNames = new HashMap<>();

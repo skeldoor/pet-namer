@@ -23,7 +23,8 @@ public class PetNamerPOH
     private boolean buildingMode = false;
     private boolean enteringHouse = false;
     public boolean inAHouse = false;
-    public String houseOwner = "";
+    public String houseOwnerUsername = "";
+    public String houseOwnerDisplayUsername = "";
 
     @Subscribe
     public void onVarbitChanged(VarbitChanged event)
@@ -45,11 +46,13 @@ public class PetNamerPOH
     public void onMenuOptionClicked(MenuOptionClicked menuOptionClicked){
         if (Objects.equals(menuOptionClicked.getMenuOption(), "Home") && menuOptionClicked.getMenuTarget().contains("Portal")){
             enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
+            houseOwnerDisplayUsername = client.getLocalPlayer().getName();
+            houseOwnerUsername = houseOwnerDisplayUsername.toLowerCase();
         }
         if (Objects.equals(menuOptionClicked.getMenuOption(), "Continue") && Objects.requireNonNull(menuOptionClicked.getWidget()).getText().contains("Go to your house")){
             enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
+            houseOwnerDisplayUsername = client.getLocalPlayer().getName();
+            houseOwnerUsername = houseOwnerDisplayUsername.toLowerCase();
         }
         if (Objects.equals(menuOptionClicked.getMenuOption(), "Continue") && Objects.requireNonNull(menuOptionClicked.getWidget()).getText().contains("Go to a friend's house")){
             enteringHouse = true;
@@ -60,12 +63,14 @@ public class PetNamerPOH
 
         if (Objects.equals(menuOptionClicked.getMenuOption(), "Break") && menuOptionClicked.getMenuTarget().contains("Teleport to house")){
             enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
+            houseOwnerDisplayUsername = client.getLocalPlayer().getName();
+            houseOwnerUsername = houseOwnerDisplayUsername.toLowerCase();
         }
 
         if (Objects.equals(menuOptionClicked.getMenuOption(), "Inside") && menuOptionClicked.getMenuTarget().contains("Teleport to house")){
             enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
+            houseOwnerDisplayUsername = client.getLocalPlayer().getName();
+            houseOwnerUsername = houseOwnerDisplayUsername.toLowerCase();
         }
 
 
@@ -80,11 +85,12 @@ public class PetNamerPOH
         log.info("gameStateChanged enteringHouse: " + enteringHouse);
         if (enteringHouse) return;
         if (gameStateChanged.getGameState() == GameState.LOADING || gameStateChanged.getGameState() == GameState.HOPPING){
-            log.info("gameStateChanged: " + houseOwner);
+            log.info("gameStateChanged: " + houseOwnerUsername);
             inAHouse = false;
             enteringHouse = false;
-            houseOwner = "";
-            log.info("gameStateChanged: " + houseOwner);
+            houseOwnerUsername = "";
+            houseOwnerDisplayUsername = "";
+            log.info("gameStateChanged: " + houseOwnerUsername);
         }
     }
 
@@ -93,17 +99,15 @@ public class PetNamerPOH
         if (obj.getGameObject().getId() == 4525 && enteringHouse){
             enteringHouse = false;
             inAHouse = true;
-            log.info("Portal is loaded, client int should have changed by now, I think we're in the house of " + houseOwner);
+            log.info("Portal is loaded, client int should have changed by now, I think we're in the house of " + houseOwnerUsername);
         }
     }
 
     @Subscribe
     public void onVarClientIntChanged(VarClientIntChanged event){
         int magicalNumber = 1112;
-        if  (event.getIndex() == magicalNumber && enteringHouse && Objects.equals(houseOwner, "")){
-            log.info("var int 1112 before changed: " + houseOwner);
-            houseOwner = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-            log.info("var int 1112 after changed: " + houseOwner);
+        if  (event.getIndex() == magicalNumber && enteringHouse && Objects.equals(houseOwnerUsername, "")){
+            houseOwnerUsername = client.getVarcStrValue(VarClientStr.INPUT_TEXT).toLowerCase();
         }
     }
 

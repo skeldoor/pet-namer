@@ -1,5 +1,19 @@
 package com.skeldoor;
 
+/* Pet scenario's I've accounted for */
+// My pets following me in overworld
+// My pets following me in anyones house
+// My pets not following me in my house
+// Other's pets following them in overworld
+// Other's pets following them in anyones house
+// Other's pets not following them in their house
+
+// With my current setup it's not possible to correctly format another player's poh pet owner names as the name
+// of the house owner is provided by the user typing in the username of the house they wish to visit. In this case
+// I just format the players pet's owner name the same as whatever username was typed into the visit friend input.
+// I could probably do something clever with scanning the area for the player or loading their correctly capitalised
+// username from the hiscores but I'll revisit that in a future update.
+
 import com.google.inject.Provides;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -148,17 +162,19 @@ public class PetNamerPlugin extends Plugin
 
 		if (entryNPC != null){
 			String username;
-			String lowerUsername;
-			if (entryNPC.getInteracting() == null && playerOwnedHouse.inAHouse) { // Wandering pet in my house
-				username = playerOwnedHouse.houseOwner;
-				lowerUsername = username;
-			} else if (entryNPC.getInteracting() != null) { // Pet following me
-				username = entryNPC.getInteracting().getName();
+			String displayUsername;
+			if (entryNPC.getInteracting() == null && playerOwnedHouse.inAHouse) { // Wandering pet in someone's house
+				username = playerOwnedHouse.houseOwnerUsername;
+				displayUsername = playerOwnedHouse.houseOwnerDisplayUsername;
+			} else if (entryNPC.getInteracting() != null) { // My pet following me because you cant hover other peoples followers
+				displayUsername = entryNPC.getInteracting().getName();
 				lowerUsername = username.toLowerCase();
+				//displayUsername = npc.getInteracting().getName();
+				//usernameLower = displayUsername.toLowerCase();
 			} else { // Unknown pet
 				return; // investigate
 			}
-			PetNamerPetData petData = petNamerPetDataManager.getPetData(username, lowerUsername, entryNPC.getName());
+			PetNamerPetData petData = petNamerPetDataManager.getPetData(username, displayUsername, entryNPC.getName());
 			if (firstEntry.getTarget().contains(Objects.requireNonNull(entryNPC.getName()))) {
 				firstEntry.setTarget("<col=ffff00>" + petData.petName);
 			}
@@ -184,18 +200,22 @@ public class PetNamerPlugin extends Plugin
 			LocalPoint lp = npc.getLocalLocation();
 			Shape clickbox = Perspective.getClickbox(client, npc.getModel(), npc.getCurrentOrientation(), lp.getX(), lp.getY(),	Perspective.getTileHeight(client, lp, npc.getWorldLocation().getPlane()));
 			if (clickbox != null && clickbox.contains(client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY())) {
-				String username;
+				String usernameLower;
+				String displayUsername;
 				if (npc.getComposition().isFollower() && npc.getInteracting() != null){
 					// Pets following players
-					username = npc.getInteracting().getName();
+					displayUsername = npc.getInteracting().getName();
+					usernameLower = displayUsername.toLowerCase();
 				} else if (!npc.getComposition().isFollower() && playerOwnedHouse.inAHouse){
 					// Pets in peoples houses arent followers so we assume they're owned by the house owner
-					username = playerOwnedHouse.houseOwner;
+					// Also we can't be sure of the capitalisation of the owner's username
+					displayUsername = playerOwnedHouse.houseOwner;
+					usernameLower = playerOwnedHouse.houseOwner;
 				} else {
 					// If it's not a follower and we're not in someones house, it's probably just any other NPC
 					continue;
 				}
-				PetNamerPetData petData = petNamerPetDataManager.getPetData(username, npc.getName());
+				PetNamerPetData petData = petNamerPetDataManager.getPetData(usernameLower, displayUsername, npc.getName());
 				MenuEntry[] currentEntries = menuOpened.getMenuEntries();
 
 				for (MenuEntry entry : currentEntries){
@@ -205,7 +225,7 @@ public class PetNamerPlugin extends Plugin
 				}
 
 				MenuEntry newEntry;
-				newEntry = createPetEntry(username, petData.petName); // TODO only create the menu if the petdata that was returned was valid, i.e the "pet" we have found isn't another random house npc
+				newEntry = createPetEntry(displayUsername, petData.petName); // TODO only create the menu if the petdata that was returned was valid, i.e the "pet" we have found isn't another random house npc
 				menuOpened.setMenuEntries(ArrayUtils.insert(0, currentEntries, newEntry));
 			}
 		}

@@ -100,11 +100,12 @@ public class PetNamerPetDataManager {
         String petName = fields[1];
         int petId = Integer.parseInt(fields[2]);
         String originalPetName = fields[3];
-        return new PetNamerPetData(username, petId, petName, originalPetName);
+        String displayUsername = fields[4];
+        return new PetNamerPetData(username, displayUsername, petId, petName, originalPetName);
     }
 
     public String serialisePetData(PetNamerPetData petData){
-        return petData.username + "," + petData.petName + "," + petData.petId + ";";
+        return petData.username + "," + petData.petName + "," + petData.petId + petData.displayUsername + ";";
     }
 
     public String createUserPetKey(String username, String originalPetName){

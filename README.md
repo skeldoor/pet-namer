@@ -1,5 +1,5 @@
 # Pet Namer
-This plugin will let you name your osrs pets allows you to share your pet's name with anyone else who has the plugin installed.
+This plugin will let you name your osrs pets and allows you to share your pet's name with anyone else who has the plugin installed.
 
 Type "::namepet PETNAME" to name the pet that is currently following you.
 

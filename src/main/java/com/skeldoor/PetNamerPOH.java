@@ -5,6 +5,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.events.*;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
@@ -13,98 +14,75 @@ import java.util.Objects;
 @Slf4j
 public class PetNamerPOH
 {
-    public static final int BUILDING_MODE_VARP = 780;
-
-    public static final int BUILDING_MODE_VARBIT = 2176;
-
     @Inject
     private Client client;
 
-    private boolean buildingMode = false;
     private boolean enteringHouse = false;
-    public boolean inAHouse = false;
-    public String houseOwner = "";
+    private boolean inAHouse = false;
+    private String houseOwner = "";
 
-    @Subscribe
-    public void onVarbitChanged(VarbitChanged event)
-    {
-        if (event.getIndex() == PetNamerPOH.BUILDING_MODE_VARP)
-        {
-            int varbitValue = client.getVarbitValue(PetNamerPOH.BUILDING_MODE_VARBIT);
-            buildingMode = (client.getVarbitValue(PetNamerPOH.BUILDING_MODE_VARBIT) == 1);
-            if (varbitValue == 1) {
-                log.info("Building mode: " + buildingMode);
-            } else if (varbitValue == 0)  {
-                log.info("Building mode: " + buildingMode);
-            }
-        }
+    public boolean isInAHouse(){
+        return inAHouse;
     }
 
+    public String getHouseOwner(){
+        return houseOwner;
+    }
 
     @Subscribe
     public void onMenuOptionClicked(MenuOptionClicked menuOptionClicked){
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Home") && menuOptionClicked.getMenuTarget().contains("Portal")){
+        String option = menuOptionClicked.getMenuOption();
+        String target = menuOptionClicked.getMenuTarget();
+        String localPlayerName = client.getLocalPlayer().getName();
+
+        // Covers entering homes from a house portal and via teleport tablets
+        if (option.equals("Home") && target.contains("Portal")){
+            enteringHouse = true;
+            houseOwner = localPlayerName;
+        } else if (target.contains("Teleport to house") && (option.equals("Break") || option.equals("Inside"))){
             enteringHouse = true;
             houseOwner = client.getLocalPlayer().getName();
-        }
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Continue") && Objects.requireNonNull(menuOptionClicked.getWidget()).getText().contains("Go to your house")){
+        } else if (option.equals("Continue")){
+            Widget menuWidget = menuOptionClicked.getWidget();
+            if (menuWidget == null) return;
+            String menuWidgetText = menuWidget.getText();
+            if (menuWidgetText == null) return;
+            if (menuWidgetText.contains("Go to your house")) {
+                enteringHouse = true;
+                houseOwner = localPlayerName;
+            } else if (menuWidgetText.contains("Go to a friend's house")){
+                enteringHouse = true;
+            }
+        } else if (option.equals("Friend's house") && target.contains("Portal")) {
             enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
         }
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Continue") && Objects.requireNonNull(menuOptionClicked.getWidget()).getText().contains("Go to a friend's house")){
-            enteringHouse = true;
-        }
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Friend's house") && menuOptionClicked.getMenuTarget().contains("Portal")){
-            enteringHouse = true;
-        }
-
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Break") && menuOptionClicked.getMenuTarget().contains("Teleport to house")){
-            enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
-        }
-
-        if (Objects.equals(menuOptionClicked.getMenuOption(), "Inside") && menuOptionClicked.getMenuTarget().contains("Teleport to house")){
-            enteringHouse = true;
-            houseOwner = client.getLocalPlayer().getName();
-        }
-
-
-        log.info("menuOptionClicked.getMenuOption(): " + menuOptionClicked.getMenuOption());
-        log.info("menuOptionClicked.getMenuTarget(): " + menuOptionClicked.getMenuTarget());
-        log.info("Objects.requireNonNull(menuOptionClicked.getWidget()).getText(): " + Objects.requireNonNull(menuOptionClicked.getWidget()).getText());
-
     }
 
     @Subscribe
     public void onGameStateChanged(GameStateChanged gameStateChanged){
-        log.info("gameStateChanged enteringHouse: " + enteringHouse);
         if (enteringHouse) return;
-        if (gameStateChanged.getGameState() == GameState.LOADING || gameStateChanged.getGameState() == GameState.HOPPING){
-            log.info("gameStateChanged: " + houseOwner);
+        if (gameStateChanged.getGameState() == GameState.LOADING || gameStateChanged.getGameState() == GameState.HOPPING || gameStateChanged.getGameState() == GameState.LOGIN_SCREEN){
             inAHouse = false;
             enteringHouse = false;
             houseOwner = "";
-            log.info("gameStateChanged: " + houseOwner);
         }
     }
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned obj){
-        if (obj.getGameObject().getId() == 4525 && enteringHouse){
+        int HOUSE_PORTAL_ID = 4525;
+        if (obj.getGameObject().getId() == HOUSE_PORTAL_ID && enteringHouse){
             enteringHouse = false;
             inAHouse = true;
-            log.info("Portal is loaded, client int should have changed by now, I think we're in the house of " + houseOwner);
         }
     }
 
     @Subscribe
     public void onVarClientIntChanged(VarClientIntChanged event){
-        int magicalNumber = 1112;
-        if  (event.getIndex() == magicalNumber && enteringHouse && Objects.equals(houseOwner, "")){
-            log.info("var int 1112 before changed: " + houseOwner);
+        //If we are entering a house but house owner is empty, we can get the house owner from the input text the user entered
+        int enteringHouseVarClientInt = 1112;
+        if  (event.getIndex() == enteringHouseVarClientInt && enteringHouse && Objects.equals(houseOwner, "")){
             houseOwner = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-            log.info("var int 1112 after changed: " + houseOwner);
         }
     }
-
 }

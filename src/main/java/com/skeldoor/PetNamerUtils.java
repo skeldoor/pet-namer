@@ -13,7 +13,7 @@ public class PetNamerUtils {
         String output = input.replaceAll(regex, "");
         output = output.substring(0, Math.min(output.length(), 35));
         if (output.length() < input.length()) {
-            sendHighlightedChatMessage("Names are limited to 35 alphanumerical characters + spaces and hyphens", chatMessageManager);
+            sendHighlightedChatMessage("Names are limited to 35 alphanumerical chars + spaces & hyphens", chatMessageManager);
         }
         return output;
     }
@@ -28,6 +28,4 @@ public class PetNamerUtils {
                 .runeLiteFormattedMessage(msg.build())
                 .build());
     }
-
-
 }

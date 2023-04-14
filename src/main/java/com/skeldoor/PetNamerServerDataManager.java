@@ -1,22 +1,21 @@
 package com.skeldoor;
 
+// Server Data Manager adapted from https://github.com/IdylRS/prop-hunt/blob/main/src/main/java/com/idyl/prophunt/PropHuntDataManager.java
+
 import com.google.gson.*;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.api.NPC;
 import okhttp3.*;
-
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 @Singleton
 public class PetNamerServerDataManager {
-    private final String baseUrl = "http://64.226.75.168:8080";
+    private final String baseUrl = "http://pet-namer.skeldoor.dev:8080";
     private final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     @Inject
@@ -50,7 +49,7 @@ public class PetNamerServerDataManager {
                 {
                     if (response.isSuccessful())
                     {
-                        log.debug("Successfully sent prop hunt data");
+                        log.debug("Successfully sent pet name data");
                         response.close();
                     }
                     else
@@ -83,7 +82,8 @@ public class PetNamerServerDataManager {
         StringBuilder usernameToPetName = new StringBuilder();
         for (NPC pet : pets){
             String originalPetName = petNamerPetDataManager.getOriginalName(pet.getId(), pet.getName());
-            String usernamePetname = petNamerPetDataManager.createUserPetKey(Objects.requireNonNull(pet.getInteracting().getName()).toLowerCase(), originalPetName);
+            if (pet.getInteracting() == null || pet.getInteracting().getName() == null) continue;
+            String usernamePetname = petNamerPetDataManager.createUserPetKey(pet.getInteracting().getName().toLowerCase(), originalPetName);
             usernameToPetName.append(usernamePetname).append(";");
         }
         grabPetsFromServer(usernameToPetName.toString(), petNamerPetDataManager);
@@ -91,7 +91,7 @@ public class PetNamerServerDataManager {
 
     private void grabPetsFromServer(String usernameToPetName, PetNamerPetDataManager petNamerPetDataManager ){
         try {
-            String url = baseUrl.concat("/pet-rename/".concat(usernameToPetName.toString()));
+            String url = baseUrl.concat("/pet-rename/".concat(usernameToPetName));
             Request r = new Request.Builder()
                     .url(url)
                     .get()
@@ -100,7 +100,7 @@ public class PetNamerServerDataManager {
             okHttpClient.newCall(r).enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
-                    log.info("Error getting prop hunt data by username", e);
+                    log.info("Error getting pet name data by username", e);
                 }
 
                 @Override
@@ -109,7 +109,7 @@ public class PetNamerServerDataManager {
                         try
                         {
                             JsonArray j = gson.fromJson(response.body().string(), JsonArray.class);
-                            List<PetNamerPetData> playerpetDatas = parsePetRenamerData(j);
+                            List<PetNamerPetData> playerpetDatas = parsePetNamerData(j);
                             for (PetNamerPetData playerpetData : playerpetDatas){
                                 petNamerPetDataManager.updatePlayerPetData(playerpetData);
                             }
@@ -129,13 +129,14 @@ public class PetNamerServerDataManager {
         }
     }
 
-    private static List<PetNamerPetData> parsePetRenamerData(JsonArray j) {
+    private static List<PetNamerPetData> parsePetNamerData(JsonArray j) {
         List<PetNamerPetData> l = new ArrayList<>();
         for (JsonElement jsonElement : j)
         {
             JsonObject jObj = jsonElement.getAsJsonObject();
             PetNamerPetData d = new PetNamerPetData(
                     jObj.get("username").getAsString(),
+                    jObj.get("displayUsername").getAsString(),
                     jObj.get("petId").getAsInt(),
                     jObj.get("petName").getAsString(),
                     jObj.get("originalPetName").getAsString());

@@ -6,10 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.events.*;
-import net.runelite.api.geometry.RectangleUnion;
-import net.runelite.api.geometry.Shapes;
-import net.runelite.api.geometry.SimplePolygon;
-import net.runelite.api.model.Jarvis;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.chat.ChatMessageManager;
@@ -27,8 +23,13 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static net.runelite.api.Perspective.COSINE;
-import static net.runelite.api.Perspective.SINE;
+/*
+Currently supports:
+Your pets following you
+Others pets following them
+Your pets wandering in your house
+Others pets wandering in their house
+*/
 
 @Slf4j
 @PluginDescriptor(
@@ -39,9 +40,6 @@ public class PetNamerPlugin extends Plugin
 {
 	@Inject
 	private Client client;
-
-	@Inject
-	private PetNamerConfig config;
 
 	@Inject
 	private EventBus eventBus;
@@ -73,20 +71,13 @@ public class PetNamerPlugin extends Plugin
 		eventBus.unregister(playerOwnedHouse);
 	}
 
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged){
-		if (!config.onlineMode() && gameStateChanged.getGameState() == GameState.LOGGED_IN){
-			petNamerPetDataManager.loadNamesFromConfig(configManager);
-		}
-	}
-
 	@Schedule(
 			period = populateInterval,
 			unit = ChronoUnit.SECONDS,
 			asynchronous = true
 	)
 	public void getPlayerConfigs() {
-		if (config.onlineMode() && client.getGameState() == GameState.LOGGED_IN){
+		if (client.getGameState() == GameState.LOGGED_IN){
 			// Batch fetch the nearby players pets
 			List<NPC> nearbyPetsWithValidPlayers =
 					client.getNpcs().stream().filter(
@@ -96,17 +87,13 @@ public class PetNamerPlugin extends Plugin
 					).collect(Collectors.toList());
 			petNamerServerDataManager.populatePlayerPets(nearbyPetsWithValidPlayers, petNamerPetDataManager);
 
-			if (playerOwnedHouse.inAHouse){
+			if (playerOwnedHouse.isInAHouse()){
 				List<NPC> wanderingPets =
 						client.getNpcs().stream().filter(
 								npc -> npc != null && npc.getName() != null && npc.getInteracting() == null
 						).collect(Collectors.toList());
-				petNamerServerDataManager.populateWanderingPets(playerOwnedHouse.houseOwner, wanderingPets, petNamerPetDataManager);
+				petNamerServerDataManager.populateWanderingPets(playerOwnedHouse.getHouseOwner(), wanderingPets, petNamerPetDataManager);
 			}
-		}
-
-		if (!config.onlineMode() && client.getGameState() == GameState.LOGGED_IN){
-			petNamerPetDataManager.storeNamesToConfig(configManager);
 		}
 	}
 
@@ -115,23 +102,25 @@ public class PetNamerPlugin extends Plugin
 		String command = commandExecuted.getCommand();
 		String[] arguments = commandExecuted.getArguments();
 		if (arguments == null) return;
-		if (command.equals("renamepet")){
+		if (command.equals("namepet")){
 			if (client.getFollower() == null){
-				PetNamerUtils.sendHighlightedChatMessage("Drop the pet that you'd like to rename!", chatMessageManager);
+				PetNamerUtils.sendHighlightedChatMessage("Drop the pet that you'd like to name!", chatMessageManager);
 				return;
 			}
 			String newPetName = String.join(" ", arguments);
+			if (newPetName.length() == 0){
+				PetNamerUtils.sendHighlightedChatMessage("Try again like this ::namepet petname", chatMessageManager);
+				return;
+			}
 			newPetName = PetNamerUtils.limitString(newPetName, chatMessageManager);
 			int petId = client.getFollower().getId();
 			String originalPetName = petNamerPetDataManager.getOriginalName(petId, client.getNpcDefinition(petId).getName());
 			if (client.getLocalPlayer().getName() == null) return;
+
 			String username = client.getLocalPlayer().getName();
 			String lowerUsername = username.toLowerCase();
 			PetNamerPetData newPetNamerPetData = new PetNamerPetData(lowerUsername, username, petId, newPetName, originalPetName);
-
-			if (config.onlineMode()){
-				petNamerServerDataManager.updatePetName(newPetNamerPetData, petNamerPetDataManager);
-			}
+			petNamerServerDataManager.updatePetName(newPetNamerPetData, petNamerPetDataManager);
 			petNamerPetDataManager.updatePlayerPetData(newPetNamerPetData);
 			setOverheadText(newPetName);
 		}
@@ -139,7 +128,7 @@ public class PetNamerPlugin extends Plugin
 
 	@Subscribe
 	public void onBeforeRender(BeforeRender ignored){
-		// Change the hover text of pets that are hoverable. my pets, others pets in their house
+		// Change the hover text of pets that are hoverable. my pets AND others pets in their house
 		MenuEntry[] menuEntries = client.getMenuEntries();
 		if (menuEntries.length == 0) return;
 		MenuEntry firstEntry = menuEntries[menuEntries.length - 1];
@@ -149,10 +138,10 @@ public class PetNamerPlugin extends Plugin
 		if (entryNPC != null){
 			String username;
 			String lowerUsername;
-			if (entryNPC.getInteracting() == null && playerOwnedHouse.inAHouse) { // Wandering pet in my house
-				username = playerOwnedHouse.houseOwner;
+			if (entryNPC.getInteracting() == null && playerOwnedHouse.isInAHouse()) { // Wandering pet in a house
+				username = playerOwnedHouse.getHouseOwner();
 				lowerUsername = username;
-			} else if (entryNPC.getInteracting() != null) { // Pet following me
+			} else if (entryNPC.getInteracting() != null && entryNPC.getInteracting().getName() != null) { // Pet following me
 				username = entryNPC.getInteracting().getName();
 				lowerUsername = username.toLowerCase();
 			} else { // Unknown pet
@@ -163,8 +152,6 @@ public class PetNamerPlugin extends Plugin
 				firstEntry.setTarget("<col=ffff00>" + petData.petName);
 			}
 		}
-
-
 
 		// Replace pet's chat box name
 		// Override a cat's in-game name too so that you can have a name longer than 6 characters
@@ -178,24 +165,26 @@ public class PetNamerPlugin extends Plugin
 	@Subscribe
 	public void onMenuOpened(MenuOpened menuOpened){
 		// For my followers, others followers, my pets in my house, and others pets in their houses
-		if (!config.rightClickPets()) return; // TODO Move this to posiiton that will stop other's pets from being right clickable but not my own
 		List<NPC> nearbyNPCs = client.getNpcs();
 		for (NPC npc : nearbyNPCs){
 			LocalPoint lp = npc.getLocalLocation();
 			Shape clickbox = Perspective.getClickbox(client, npc.getModel(), npc.getCurrentOrientation(), lp.getX(), lp.getY(),	Perspective.getTileHeight(client, lp, npc.getWorldLocation().getPlane()));
 			if (clickbox != null && clickbox.contains(client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY())) {
 				String username;
-				if (npc.getComposition().isFollower() && npc.getInteracting() != null){
+				String displayUsername;
+				if (npc.getComposition().isFollower() && npc.getInteracting() != null && npc.getInteracting().getName() != null){
 					// Pets following players
-					username = npc.getInteracting().getName();
-				} else if (!npc.getComposition().isFollower() && playerOwnedHouse.inAHouse){
-					// Pets in peoples houses arent followers so we assume they're owned by the house owner
-					username = playerOwnedHouse.houseOwner;
+					displayUsername = npc.getInteracting().getName();
+					username = displayUsername.toLowerCase();
+				} else if (!npc.getComposition().isFollower() && playerOwnedHouse.isInAHouse()){
+					// Pets in peoples houses aren't followers so we assume they're owned by the house owner
+					displayUsername = playerOwnedHouse.getHouseOwner();
+					username = displayUsername.toLowerCase();
 				} else {
 					// If it's not a follower and we're not in someones house, it's probably just any other NPC
 					continue;
 				}
-				PetNamerPetData petData = petNamerPetDataManager.getPetData(username, npc.getName());
+				PetNamerPetData petData = petNamerPetDataManager.getPetData(username, displayUsername, npc.getName());
 				MenuEntry[] currentEntries = menuOpened.getMenuEntries();
 
 				for (MenuEntry entry : currentEntries){
@@ -205,7 +194,14 @@ public class PetNamerPlugin extends Plugin
 				}
 
 				MenuEntry newEntry;
-				newEntry = createPetEntry(username, petData.petName); // TODO only create the menu if the petdata that was returned was valid, i.e the "pet" we have found isn't another random house npc
+				/* TODO
+				    Currently only named pets will have a correctly formatted username when they're roaming in \
+				    another players house this is because a username capitalisation cannot be guarenteed as we're \
+				    only trusting the input from the player typing the friend's name they wish to visit.
+				    Named pets will look like: "Skeldoor's NamedPet"
+				    But unnamed pets will be formatted however the user typed the house name: "SkElDoOr's Beaver"
+				*/
+				newEntry = createPetEntry(petData.displayUsername, petData.petName);
 				menuOpened.setMenuEntries(ArrayUtils.insert(0, currentEntries, newEntry));
 			}
 		}
@@ -257,241 +253,4 @@ public class PetNamerPlugin extends Plugin
 		int secondsToDisplay = 6;
 		local.setOverheadCycle(cyclesPerSecond * secondsToDisplay);
 	}
-
-	public static Shape getClickbox(Client client, Model model, int orientation, int x, int y, int z)
-	{
-		if (model == null)
-		{
-			return null;
-		}
-
-		SimplePolygon bounds = calculateAABB(client, model, orientation, x, y, z);
-
-		if (bounds == null)
-		{
-			return null;
-		}
-
-		if (model.isClickable())
-		{
-			return bounds;
-		}
-
-		Shapes<SimplePolygon> bounds2d = calculate2DBounds(client, model, orientation, x, y, z);
-		if (bounds2d == null)
-		{
-			return null;
-		}
-
-		for (SimplePolygon poly : bounds2d.getShapes())
-		{
-			poly.intersectWithConvex(bounds);
-		}
-
-		return bounds2d;
-	}
-
-	private static SimplePolygon calculateAABB(Client client, Model m, int jauOrient, int x, int y, int z)
-	{
-		AABB aabb = m.getAABB(jauOrient);
-
-		int x1 = aabb.getCenterX();
-		int y1 = aabb.getCenterZ();
-		int z1 = aabb.getCenterY();
-
-		int ex = aabb.getExtremeX();
-		int ey = aabb.getExtremeZ();
-		int ez = aabb.getExtremeY();
-
-		int x2 = x1 + ex;
-		int y2 = y1 + ey;
-		int z2 = z1 + ez;
-
-		x1 -= ex;
-		y1 -= ey;
-		z1 -= ez;
-
-		int[] xa = new int[]{
-				x1, x2, x1, x2,
-				x1, x2, x1, x2
-		};
-		int[] ya = new int[]{
-				y1, y1, y2, y2,
-				y1, y1, y2, y2
-		};
-		int[] za = new int[]{
-				z1, z1, z1, z1,
-				z2, z2, z2, z2
-		};
-
-		int[] x2d = new int[8];
-		int[] y2d = new int[8];
-
-		modelToCanvasCpu(client, 8, x, y, z, 0, xa, ya, za, x2d, y2d);
-
-		return Jarvis.convexHull(x2d, y2d);
-	}
-
-	private static Shapes<SimplePolygon> calculate2DBounds(Client client, Model m, int jauOrient, int x, int y, int z)
-	{
-		int[] x2d = new int[m.getVerticesCount()];
-		int[] y2d = new int[m.getVerticesCount()];
-		final int[] faceColors3 = m.getFaceColors3();
-
-		modelToCanvasCpu(client,
-				m.getVerticesCount(),
-				x, y, z,
-				jauOrient,
-				m.getVerticesX(), m.getVerticesZ(), m.getVerticesY(),
-				x2d, y2d);
-
-		final int radius = 5;
-
-		int[][] tris = new int[][]{
-				m.getFaceIndices1(),
-				m.getFaceIndices2(),
-				m.getFaceIndices3()
-		};
-
-		int vpX1 = client.getViewportXOffset();
-		int vpY1 = client.getViewportXOffset();
-		int vpX2 = vpX1 + client.getViewportWidth();
-		int vpY2 = vpY1 + client.getViewportHeight();
-
-		List<RectangleUnion.Rectangle> rects = new ArrayList<>(m.getFaceCount());
-
-		nextTri:
-		for (int tri = 0; tri < m.getFaceCount(); tri++)
-		{
-			if (faceColors3[tri] == -2)
-			{
-				continue;
-			}
-
-			int
-					minX = Integer.MAX_VALUE,
-					minY = Integer.MAX_VALUE,
-					maxX = Integer.MIN_VALUE,
-					maxY = Integer.MIN_VALUE;
-
-			for (int[] vertex : tris)
-			{
-				final int idx = vertex[tri];
-				final int xs = x2d[idx];
-				final int ys = y2d[idx];
-
-				if (xs == Integer.MIN_VALUE || ys == Integer.MIN_VALUE)
-				{
-					continue nextTri;
-				}
-
-				if (xs < minX)
-				{
-					minX = xs;
-				}
-				if (xs > maxX)
-				{
-					maxX = xs;
-				}
-				if (ys < minY)
-				{
-					minY = ys;
-				}
-				if (ys > maxY)
-				{
-					maxY = ys;
-				}
-			}
-
-			minX -= radius;
-			minY -= radius;
-			maxX += radius;
-			maxY += radius;
-
-			if (vpX1 > maxX || vpX2 < minX || vpY1 > maxY || vpY2 < minY)
-			{
-				continue;
-			}
-
-			RectangleUnion.Rectangle r = new RectangleUnion.Rectangle(minX, minY, maxX, maxY);
-
-			rects.add(r);
-		}
-
-		return RectangleUnion.union(rects);
-	}
-
-
-	private static void modelToCanvasCpu(Client client, int end, int x3dCenter, int y3dCenter, int z3dCenter, int rotate, int[] x3d, int[] y3d, int[] z3d, int[] x2d, int[] y2d)
-	{
-		final int
-				cameraPitch = client.getCameraPitch(),
-				cameraYaw = client.getCameraYaw(),
-
-				pitchSin = SINE[cameraPitch],
-				pitchCos = COSINE[cameraPitch],
-				yawSin = SINE[cameraYaw],
-				yawCos = COSINE[cameraYaw],
-				rotateSin = SINE[rotate],
-				rotateCos = COSINE[rotate],
-
-				cx = x3dCenter - client.getCameraX(),
-				cy = y3dCenter - client.getCameraY(),
-				cz = z3dCenter - client.getCameraZ(),
-
-				viewportXMiddle = client.getViewportWidth() / 2,
-				viewportYMiddle = client.getViewportHeight() / 2,
-				viewportXOffset = client.getViewportXOffset(),
-				viewportYOffset = client.getViewportYOffset(),
-
-				zoom3d = client.getScale();
-
-		for (int i = 0; i < end; i++)
-		{
-			int x = x3d[i];
-			int y = y3d[i];
-			int z = z3d[i];
-
-			if (rotate != 0)
-			{
-				int x0 = x;
-				x = x0 * rotateCos + y * rotateSin >> 16;
-				y = y * rotateCos - x0 * rotateSin >> 16;
-			}
-
-			x += cx;
-			y += cy;
-			z += cz;
-
-			final int
-					x1 = x * yawCos + y * yawSin >> 16,
-					y1 = y * yawCos - x * yawSin >> 16,
-					y2 = z * pitchCos - y1 * pitchSin >> 16,
-					z1 = y1 * pitchCos + z * pitchSin >> 16;
-
-			int viewX, viewY;
-
-			if (z1 < 50)
-			{
-				viewX = Integer.MIN_VALUE;
-				viewY = Integer.MIN_VALUE;
-			}
-			else
-			{
-				viewX = (viewportXMiddle + x1 * zoom3d / z1) + viewportXOffset;
-				viewY = (viewportYMiddle + y2 * zoom3d / z1) + viewportYOffset;
-			}
-
-			x2d[i] = viewX;
-			y2d[i] = viewY;
-		}
-	}
-
-	@Provides
-	PetNamerConfig provideConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(PetNamerConfig.class);
-	}
-
-
 }

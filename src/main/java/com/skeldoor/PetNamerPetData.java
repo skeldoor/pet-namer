@@ -14,9 +14,4 @@ public class PetNamerPetData {
         this.petName = petName;
         this.originalPetName = originalPetName;
     }
-
-    @Override
-    public String toString() {
-        return "username: " + username + "displayusername: " + displayUsername +", petId: " + petId + ", petName: " + petName + ", originalPetName: " + originalPetName;
-    }
 }

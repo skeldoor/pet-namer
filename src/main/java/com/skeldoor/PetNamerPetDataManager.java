@@ -1,6 +1,8 @@
 package com.skeldoor;
 
 import lombok.extern.slf4j.Slf4j;
+
+import javax.inject.Inject;
 import java.util.HashMap;
 
 @Slf4j
@@ -10,7 +12,7 @@ public class PetNamerPetDataManager {
     HashMap<Integer, String> originalPetNames;
 
     public String getPetName(String username, String petName){
-        PetNamerPetData petData = playerPetNames.get(createUserPetKey(username, petName));
+        PetNamerPetData petData = playerPetNames.get(PetNamerUtils.createUserPetKey(username, petName));
         if (petData == null){
             return petName;
         } else{
@@ -19,7 +21,7 @@ public class PetNamerPetDataManager {
     }
 
     public PetNamerPetData getPetData(String username, String displayUsername, String petName){
-        return playerPetNames.getOrDefault(createUserPetKey(username, petName), new PetNamerPetData(username, displayUsername, -1, petName, petName));
+        return playerPetNames.getOrDefault(PetNamerUtils.createUserPetKey(username, petName), new PetNamerPetData(username, displayUsername, -1, petName, petName));
     }
 
     public PetNamerPetDataManager(){
@@ -29,7 +31,7 @@ public class PetNamerPetDataManager {
 
     public void updatePlayerPetData(PetNamerPetData petData){
         putOriginalName(petData.petId, petData.originalPetName);
-        String key = createUserPetKey(petData.username, petData.originalPetName);
+        String key = PetNamerUtils.createUserPetKey(petData.username, petData.originalPetName);
         PetNamerPetData existingPetData = getPlayerPetName(key);
         if (existingPetData == null){
             playerPetNames.put(key, petData);
@@ -52,14 +54,11 @@ public class PetNamerPetDataManager {
     }
 
     PetNamerPetData getPlayerPetName(String username, String originalPetName){
-        return getPlayerPetName(createUserPetKey(username, originalPetName));
+        return getPlayerPetName(PetNamerUtils.createUserPetKey(username, originalPetName));
     }
 
     PetNamerPetData getPlayerPetName(String key){
         return playerPetNames.get(key);
     }
 
-    public String createUserPetKey(String username, String originalPetName){
-        return username.toLowerCase() + ":" + originalPetName;
-    }
 }

@@ -253,4 +253,10 @@ public class PetNamerPlugin extends Plugin
 		int secondsToDisplay = 6;
 		local.setOverheadCycle(cyclesPerSecond * secondsToDisplay);
 	}
+
+	@Provides
+	PetNamerConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(PetNamerConfig.class);
+	}
 }

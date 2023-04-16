@@ -26,7 +26,7 @@ public class PetNamerServerDataManager {
 
     protected void updatePetName(PetNamerPetData data, PetNamerPetDataManager petNamerPetDataManager)
     {
-        String username = urlifyString(petNamerPetDataManager.createUserPetKey(data.username, data.originalPetName));
+        String username = urlifyString(PetNamerUtils.createUserPetKey(data.username, data.originalPetName));
         String url = baseUrl.concat("/pet-rename/"+username);
 
         try
@@ -71,7 +71,7 @@ public class PetNamerServerDataManager {
         StringBuilder usernameToPetName = new StringBuilder();
         for (NPC pet : pets){
             String originalPetName = petNamerPetDataManager.getOriginalName(pet.getId(), pet.getName());
-            String usernamePetname = petNamerPetDataManager.createUserPetKey(houseOwnerUsername.toLowerCase(), originalPetName);
+            String usernamePetname = PetNamerUtils.createUserPetKey(houseOwnerUsername.toLowerCase(), originalPetName);
             usernameToPetName.append(usernamePetname).append(";");
         }
         grabPetsFromServer(usernameToPetName.toString(), petNamerPetDataManager);
@@ -83,7 +83,7 @@ public class PetNamerServerDataManager {
         for (NPC pet : pets){
             String originalPetName = petNamerPetDataManager.getOriginalName(pet.getId(), pet.getName());
             if (pet.getInteracting() == null || pet.getInteracting().getName() == null) continue;
-            String usernamePetname = petNamerPetDataManager.createUserPetKey(pet.getInteracting().getName().toLowerCase(), originalPetName);
+            String usernamePetname = PetNamerUtils.createUserPetKey(pet.getInteracting().getName().toLowerCase(), originalPetName);
             usernameToPetName.append(usernamePetname).append(";");
         }
         grabPetsFromServer(usernameToPetName.toString(), petNamerPetDataManager);

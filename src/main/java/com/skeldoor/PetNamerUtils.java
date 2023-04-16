@@ -28,4 +28,8 @@ public class PetNamerUtils {
                 .runeLiteFormattedMessage(msg.build())
                 .build());
     }
+
+    public static String createUserPetKey(String username, String originalPetName){
+        return username.toLowerCase() + ":" + originalPetName;
+    }
 }

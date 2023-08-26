@@ -51,6 +51,9 @@ public class PetNamerPlugin extends Plugin
 	private ConfigManager configManager;
 
 	@Inject
+	private PetNamerConfig config;
+
+	@Inject
 	private PetNamerServerDataManager petNamerServerDataManager;
 
 	@Inject
@@ -93,6 +96,10 @@ public class PetNamerPlugin extends Plugin
 								npc -> npc != null && npc.getName() != null && npc.getInteracting() == null
 						).collect(Collectors.toList());
 				petNamerServerDataManager.populateWanderingPets(playerOwnedHouse.getHouseOwner(), wanderingPets, petNamerPetDataManager);
+			}
+			if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null){
+				String username = client.getLocalPlayer().getName().toLowerCase();
+				PetNamerLocalStorage.storeNamesToConfig(username, configManager, petNamerPetDataManager);
 			}
 		}
 	}
@@ -148,6 +155,12 @@ public class PetNamerPlugin extends Plugin
 				return; // investigate
 			}
 			PetNamerPetData petData = petNamerPetDataManager.getPetData(username, lowerUsername, entryNPC.getName());
+			// If localmode is enabled, only create menu entries for your own pets
+			if (config.localMode() && client.getLocalPlayer() != null ){
+				if (!Objects.equals(petData.username, client.getLocalPlayer().getName().toLowerCase())){
+					return;
+				}
+			}
 			if (firstEntry.getTarget().contains(Objects.requireNonNull(entryNPC.getName()))) {
 				firstEntry.setTarget("<col=ffff00>" + petData.petName);
 			}
@@ -185,6 +198,13 @@ public class PetNamerPlugin extends Plugin
 					continue;
 				}
 				PetNamerPetData petData = petNamerPetDataManager.getPetData(username, displayUsername, npc.getName());
+
+				// If localmode is enabled, only create menu entries for your own pets
+				if (config.localMode() && client.getLocalPlayer() != null ){
+					if (!Objects.equals(petData.username, client.getLocalPlayer().getName().toLowerCase())){
+						continue;
+					}
+				}
 				MenuEntry[] currentEntries = menuOpened.getMenuEntries();
 
 				for (MenuEntry entry : currentEntries){

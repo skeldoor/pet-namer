@@ -32,4 +32,8 @@ public class PetNamerUtils {
     public static String createUserPetKey(String username, String originalPetName){
         return username.toLowerCase() + ":" + originalPetName;
     }
+
+    public static String[] parseUserPetKey(String userPetKey){
+        return userPetKey.split(":");
+    }
 }

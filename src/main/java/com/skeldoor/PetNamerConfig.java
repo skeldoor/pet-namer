@@ -10,7 +10,7 @@ public interface PetNamerConfig extends Config
     @ConfigItem(
             keyName = "localMode",
             name = "Local Only Mode",
-            description = "Enable this to only get player names from your local config"
+            description = "Enable this to only show pet names for your own pets and to stop pulling names from the 3rd party server"
     )
     default boolean localMode()
     {

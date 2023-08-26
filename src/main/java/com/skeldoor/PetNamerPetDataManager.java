@@ -3,7 +3,7 @@ package com.skeldoor;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
-import java.util.HashMap;
+import java.util.*;
 
 @Slf4j
 public class PetNamerPetDataManager {
@@ -22,6 +22,19 @@ public class PetNamerPetDataManager {
 
     public PetNamerPetData getPetData(String username, String displayUsername, String petName){
         return playerPetNames.getOrDefault(PetNamerUtils.createUserPetKey(username, petName), new PetNamerPetData(username, displayUsername, -1, petName, petName));
+    }
+
+    public List<PetNamerPetData> getPlayersPets(String username){
+        username = username.toLowerCase();
+        List<PetNamerPetData> playersPetDatas = new ArrayList<>();
+        for(Map.Entry<String, PetNamerPetData> entry : playerPetNames.entrySet()) {
+            String key = entry.getKey();
+            PetNamerPetData value = entry.getValue();
+            if (Objects.equals(PetNamerUtils.parseUserPetKey(key)[0], username)){
+                playersPetDatas.add(value);
+            }
+        }
+        return playersPetDatas;
     }
 
     public PetNamerPetDataManager(){

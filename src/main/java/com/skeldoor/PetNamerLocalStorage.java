@@ -20,9 +20,9 @@ public class PetNamerLocalStorage {
         }
     }
 
-    public void storeNamesToConfig(ConfigManager configManager){
+    public static void storeNamesToConfig(String username, ConfigManager configManager, PetNamerPetDataManager petNamerPetDataManager){
         StringBuilder configEntry = new StringBuilder();
-        for (PetNamerPetData petData : playerPetNames.values()){
+        for (PetNamerPetData petData : petNamerPetDataManager.getPlayersPets(username)){
             String serialised = serialisePetData(petData);
             configEntry.append(serialised);
         }
@@ -40,7 +40,7 @@ public class PetNamerLocalStorage {
         return new PetNamerPetData(username, displayUsername, petId, petName, originalPetName);
     }
 
-    public String serialisePetData(PetNamerPetData petData){
+    public static String serialisePetData(PetNamerPetData petData){
         return  petData.username + "," +
                 petData.displayUsername + "," +
                 petData.petId + "," +
